@@ -1,309 +1,220 @@
-# Kubernetes 二进制安装 Ansible Playbook
+# Ansible Kubernetes 单节点二进制部署项目
 
-本项目用于通过 Ansible 自动化安装二进制版本的 Kubernetes 集群，支持高可用（HA）部署。
+这是一个使用 Ansible 自动化部署 Kubernetes 集群的项目，采用二进制方式安装 Kubernetes 组件，适用于 Ubuntu 24.04 系统。仅支持单节点部署，适用于测试环境，可以快速搭建一个完整的 Kubernetes 集群环境。
 
-## 功能特性
+## 📋 项目特性
 
-- ✅ 支持 Kubernetes 高可用（HA）集群部署
-- ✅ 自动生成 SSL 证书和 kubeconfig 配置文件
-- ✅ 支持 etcd 集群部署（3节点）
-- ✅ 支持 Docker 和 Containerd 容器运行时
-- ✅ 自动配置系统参数、内核参数和网络参数
-- ✅ 支持 Keepalived + HAProxy 实现 API Server 高可用
-- ✅ 自动安装和配置 CNI 网络插件
-- ✅ 配置代理加速镜像拉取
+- ✅ **二进制安装方式**：使用 Kubernetes 官方二进制文件进行安装
+- ✅ **单节点部署**：支持在单台服务器上部署完整的 Kubernetes 集群（Master + Worker）
+- ✅ **完整的组件支持**：包含 etcd、kube-apiserver、kube-controller-manager、kube-scheduler、kubelet、kube-proxy 等核心组件
+- ✅ **容器运行时选择**：支持 containerd 或 Docker 作为容器运行时
+- ✅ **自动化证书管理**：自动生成和管理 Kubernetes 所需的 SSL 证书
+- ✅ **插件支持**：包含 CoreDNS、cilium 等常用插件
+- ✅ **配置灵活**：通过变量文件轻松配置集群参数
 
-## 目录结构
+## 🏗️ 项目结构
 
 ```
 .
 ├── ansible.cfg              # Ansible 配置文件
 ├── inventory/               # 主机清单目录
-│   └── hosts.yml           # 主机清单文件（YAML 格式）
+│   └── hosts.yml           # 主机清单文件
 ├── playbooks/              # Playbook 目录
 │   ├── generate-config.yml # 生成配置文件（证书和 kubeconfig）
 │   ├── install-master.yml  # 安装 Master 节点
 │   └── install-worker.yml  # 安装 Worker 节点
-├── roles/                  # 角色目录
-│   ├── configure/         # 配置生成角色（证书和 kubeconfig）
-│   ├── init-system/       # 系统初始化角色
-│   ├── container-runtime/ # 容器运行时（Docker/Containerd）
-│   ├── etcd/              # etcd 集群部署
-│   ├── keepalived/        # Keepalived 高可用
-│   ├── haproxy/           # HAProxy 负载均衡
-│   ├── kube-apiserver/    # API Server 组件
-│   ├── kube-controller-manager/ # Controller Manager 组件
-│   ├── kube-scheduler/    # Scheduler 组件
-│   ├── kubelet/           # Kubelet 组件
-│   ├── kube-proxy/        # Kube-proxy 组件
-│   └── addons/            # 插件安装（Cilium、CoreDNS 等）
-├── group_vars/            # 组变量目录
-│   ├── all.yml           # 全局变量
-│   ├── masters.yml       # Master 节点变量
-│   └── workers.yml       # Worker 节点变量
-├── host_vars/            # 主机变量目录
-├── files/                # 文件目录
-│   ├── download/         # 下载的二进制文件（已忽略）
-│   └── download.sh       # 下载脚本
-└── templates/            # 模板目录（Jinja2 模板）
+├── roles/                  # Ansible 角色目录
+│   ├── addons/             # Kubernetes 插件（CoreDNS、Flannel 等）
+│   ├── configure/          # 配置生成（证书、kubeconfig）
+│   ├── container-runtime/  # 容器运行时（containerd/Docker）
+│   ├── etcd-single/        # etcd 单节点部署
+│   ├── init-system/        # 系统初始化
+│   ├── kube-apiserver/     # kube-apiserver 组件
+│   ├── kube-controller-manager/ # kube-controller-manager 组件
+│   ├── kube-proxy/         # kube-proxy 组件
+│   ├── kube-scheduler/     # kube-scheduler 组件
+│   └── kubelet/            # kubelet 组件
+├── group_vars/             # 组变量目录
+│   ├── all.yml            # 全局变量
+│   ├── masters.yml        # Master 节点变量
+│   └── workers.yml        # Worker 节点变量
+├── host_vars/             # 主机变量目录
+│   ├── master1.yml        # Master1 主机变量
+│   ├── master2.yml        # Master2 主机变量
+│   └── master3.yml        # Master3 主机变量
+├── templates/             # 模板文件目录
+├── files/                 # 文件目录
+└── README.md              # 项目说明文档
 ```
 
-## 系统要求
+## 📦 前置要求
 
-### 控制节点（Ansible 控制机）
+### 控制节点要求
 
-- Ansible >= 2.9
-- Python >= 3.6
-- SSH 访问目标节点
-- 脚本会自动安装 `cfssl`、`cfssljson`、`kubectl` 命令行工具
+- **Ansible 版本**：>= 2.9
+- **Python 版本**：>= 3.6
+- **操作系统**：Linux/macOS
 
-### 目标节点（Kubernetes 节点）
+### 目标节点要求
 
-- Ubuntu 24.04.2 LTS（推荐）或 Ubuntu 20.04+
-- 4GB+ RAM（推荐 8GB+）
-- 2+ CPU 核心（推荐 4+）
-- 20GB+ 磁盘空间
-- 网络互通
-- SSH 访问权限（root 或具有 sudo 权限的用户）
+- **操作系统**：Ubuntu 24.04
+- **用户权限**：root 或具有 sudo 权限的用户
+- **SSH 访问**：控制节点能够通过 SSH 访问目标节点
+- **网络连接**：目标节点需要能够访问互联网以下载 Kubernetes 二进制文件
 
-## 快速开始
+## 🚀 快速开始
 
 ### 1. 配置主机清单
 
-编辑 `inventory/hosts.yml` 文件，填入实际的服务器 IP 地址和主机名：
+编辑 `inventory/hosts.yml` 文件，配置目标服务器的 IP 地址和主机名：
 
 ```yaml
-masters:
-  hosts:
-    master1:
-      ansible_host: 192.168.0.112
-      hostname: 'master01.k8s.local'
-      etcd_hostname: 'etcd01.k8s.local'
-    master2:
-      ansible_host: 192.168.0.113
-      hostname: 'master02.k8s.local'
-      etcd_hostname: 'etcd02.k8s.local'
-    master3:
-      ansible_host: 192.168.0.114
-      hostname: 'master03.k8s.local'
-      etcd_hostname: 'etcd03.k8s.local'
-
-etcd:
-  hosts:
-    etcd1:
-      ansible_host: 192.168.0.112
-      etcd_hostname: 'etcd01.k8s.local'
-    # ... 其他 etcd 节点
+all:
+  children:
+    etcd:
+      hosts:
+        etcd:
+          ansible_host: 192.168.0.115
+          etcd_hostname: 'etcd.k8s.local'
+    
+    masters:
+      hosts:
+        master:
+          ansible_host: 192.168.0.115
+          hostname: 'master.k8s.local'
+          etcd_hostname: 'etcd.k8s.local'
+    
+    workers:
+      hosts:
+        worker1:
+          ansible_host: 192.168.1.30
 ```
 
-### 2. 配置变量
+### 2. 配置全局变量
 
-根据实际环境修改 `group_vars/all.yml` 文件中的变量：
+编辑 `group_vars/all.yml` 文件，根据实际环境修改以下关键变量：
 
-- `COMMON_WILDCARD_DOMAIN_NAME`: 泛域名，用于生成证书
-- `COMMON_LOAD_BALANCE_HOSTNAME`: Keepalived VIP 或域名
-- `COMMON_LOAD_BALANCE_PORT`: 高可用端口
-- `COMMON_K8S_IPS`: 所有节点的 IP 地址（逗号分隔）
-- `container_runtime`: 容器运行时（`docker` 或 `containerd`）
-- `pod_network`: Pod 网络 CIDR
-- `service_network`: Service 网络 CIDR
-- `keepalived_vip`: Keepalived 虚拟 IP
-- `harbor_hostname`: Harbor 镜像仓库地址
-- `proxy_enabled`: 是否启用代理
-- `proxy_url`: 代理地址
+- `COMMON_K8S_IPS`：Kubernetes 节点的 IP 地址
+- `container_runtime`：容器运行时（`containerd` 或 `docker`）
+- `pod_network`：Pod 网络 CIDR
+- `service_network`：Service 网络 CIDR
+- `dns_clusterip`：CoreDNS 的 ClusterIP
+- `proxy_url`：镜像下载代理地址（如需要）
 
-### 3. 下载二进制文件
+### 3. 配置 SSH 访问
 
-在控制节点执行下载脚本：
-
-```bash
-cd files
-bash download.sh
-```
-
-脚本会自动下载以下组件到 `files/download/` 目录：
-- Kubernetes 二进制文件（kube-apiserver, kube-controller-manager, kube-scheduler, kubelet, kube-proxy, kubectl）
-- etcd 二进制文件
-- CNI 插件
-- cri-dockerd（用于 Docker 运行时）
-- containerd、runc、nerdctl、crictl（用于 Containerd 运行时）
-- cfssl 和 cfssljson（用于生成证书）
+确保控制节点可以通过 SSH 访问目标节点配置免秘钥。
 
 ### 4. 生成配置文件
 
-在控制节点执行，生成 SSL 证书和 kubeconfig 文件：
+首先运行配置生成 playbook，生成 SSL 证书和 kubeconfig 文件：
 
 ```bash
 ansible-playbook playbooks/generate-config.yml
 ```
 
-生成的配置文件会保存在 `files/generate/` 目录中：
-- `etcd/`: etcd 证书
-- `k8s/`: Kubernetes 证书
-- `kubeconfigs/`: kubeconfig 文件
-
 ### 5. 安装 Master 节点
+
+运行 Master 节点安装 playbook：
 
 ```bash
 ansible-playbook playbooks/install-master.yml
 ```
 
-此 playbook 会执行以下操作：
-1. 系统初始化（主机名、时区、防火墙、swap、内核参数等）
-2. 安装 Docker 或 Containerd 容器运行时
-3. 部署 etcd 集群
-4. 配置 Keepalived + HAProxy 实现 API Server 高可用
-5. 安装 Kubernetes Master 组件（API Server、Controller Manager、Scheduler）
-6. 安装 Kubelet 和 Kube-proxy
-7. 到节点中的addons目录，按序号执行脚本，脚本自动安装 Cilium 网络插件和 CoreDNS
+### 6. 安装 Worker 节点（可选）
 
-### 6. 安装 Worker 节点
+如果需要添加 Worker 节点，运行：
 
 ```bash
 ansible-playbook playbooks/install-worker.yml
 ```
 
-此 playbook 会执行以下操作：
-1. 系统初始化
-2. 安装容器运行时
-3. 安装 Kubelet 和 Kube-proxy
+## ⚙️ 配置说明
 
-## 详细配置说明
+### 主要配置变量
 
-### 网络配置
+在 `group_vars/all.yml` 中可以配置以下变量：
 
-在 `group_vars/all.yml` 中配置：
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `container_runtime` | 容器运行时 | `containerd` |
+| `pod_network` | Pod 网络 CIDR | `10.244.0.0/16` |
+| `service_network` | Service 网络 CIDR | `172.16.0.0/16` |
+| `dns_clusterip` | CoreDNS ClusterIP | `172.16.0.10` |
+| `time_server_address` | NTP 服务器地址 | `ntp.aliyun.com` |
+| `proxy_enabled` | 是否启用代理 | `true` |
+| `proxy_url` | 代理地址 | `socks5://192.168.0.100:7897` |
 
-```yaml
-# Pod 网络
-pod_network: '10.244.0.0/16'
+### Ansible 配置
 
-# Service 网络
-service_network: '172.16.0.0/16'
+`ansible.cfg` 文件中的主要配置：
 
-# DNS 集群 IP
-dns_clusterip: '172.16.0.10'
-```
+- `inventory`：主机清单文件路径
+- `remote_user`：远程用户（默认 root）
+- `private_key_file`：SSH 私钥文件路径，默认是 ~/.ssh/id_rsa 文件
 
-### 高可用配置
+## 🔧 使用说明
 
-```yaml
-# Keepalived VIP
-keepalived_vip: '192.168.0.119'
-keepalived_vip_netmask: '24'
-keepalived_router_id: '108'
+### 检查连接
 
-# 负载均衡主机名
-COMMON_LOAD_BALANCE_HOSTNAME: 'master.k8s.local'
-COMMON_LOAD_BALANCE_PORT: '8443'
-```
-
-### 容器运行时
-
-支持 Docker 和 Containerd，在 `group_vars/all.yml` 中配置：
-
-```yaml
-container_runtime: 'containerd'  # 或 'docker'
-docker_data_root: '/var/lib/docker'
-```
-
-**注意：** 选择不同的容器运行时，会自动配置相应的 kubelet 服务文件。
-
-### 代理配置
-
-如果需要通过代理下载镜像，在 `group_vars/all.yml` 中配置：
-
-```yaml
-proxy_enabled: true
-proxy_url: 'socks5://192.168.0.100:7897'  # 或 'http://proxy:port'
-```
-
-## 验证安装
-
-### 检查集群状态
-
-在 Master 节点执行：
+在运行 playbook 之前，可以先测试与目标节点的连接：
 
 ```bash
+ansible all -m ping
+```
+
+### 查看主机清单
+
+```bash
+ansible-inventory --list
+```
+
+### 运行特定任务
+
+如果需要只运行某个角色的任务，可以使用标签：
+
+```bash
+ansible-playbook playbooks/install-master.yml --tags "init-system"
+```
+
+## 📝 部署后的操作
+
+### 验证集群状态
+
+部署完成后，在 Master 节点上执行以下命令验证集群状态：
+
+```bash
+# 查看节点状态
 kubectl get nodes
+
+# 查看所有 Pod 状态
 kubectl get pods --all-namespaces
+
+# 查看集群信息
 kubectl cluster-info
 ```
 
-### 检查 etcd 集群
-
-```bash
-etcdctl --endpoints='etcd01.k8s.local:2379,etcd02.k8s.local:2379,etcd03.k8s.local:2379' \
-  --cacert=/etc/etcd/ssl/etcd-ca.pem \
-  --cert=/etc/etcd/ssl/etcd.pem \
-  --key=/etc/etcd/ssl/etcd-key.pem \
-  endpoint status
-```
-
-### 检查网络插件
-
-```bash
-# 检查 Cilium 状态
-kubectl get pods -n kube-system | grep cilium
-
-# 检查 CoreDNS 状态
-kubectl get pods -n kube-system | grep coredns
-```
-
-### 检查节点状态文件
-
-安装过程中会在 `/root/.state/` 目录创建状态文件：
-- `initok`: 系统初始化完成
-- `certok`: 证书生成完成
-- `container-runtimeok`: 容器运行时安装完成
-- `etcdok`: etcd 安装完成
-- `kube-apiserverok`: API Server 安装完成
-- `kubeletok`: Kubelet 安装完成
-- `addonsok`: 插件安装完成
-
-## 故障排查
-
-### 查看 Ansible 日志
-
-```bash
-tail -f ansible.log
-```
+## 🛠️ 故障排查
 
 ### 常见问题
 
-1. **镜像拉取失败**
-   - 检查容器运行时的镜像源配置
-   - 验证网络连接和代理设置
-   - 检查防火墙规则
+1. **SSH 连接失败**
+   - 检查网络连通性
+   - 确认 SSH 密钥配置正确
+   - 检查 `ansible.cfg` 中的 `private_key_file` 路径
 
-2. **其他问题**
-   - 安装过程中会有一次重启，中断后重新执行 ansible-playbook playbooks/install-master.yml 命令即可。
-   - 如遇中断重新执行 ansible-playbook playbooks/install-master.yml 命令即可。
-
-## 注意事项
-
-- ⚠️ 首次安装会自动重启节点（系统初始化后）
-
-## 版本信息
-
-- **Kubernetes**: v1.34.3
-- **etcd**: v3.6.4
-- **CNI**: v1.7.1
-- **cri-dockerd**: v0.3.20
-- **containerd**: v2.0.5
-- **runc**: v1.1.12
-- **nerdctl**: v2.2.1
-- **crictl**: v1.34.0
-- **cfssl**: v1.6.5
-
-## 许可证
+## 📄 许可证
 
 本项目采用 MIT 许可证。
 
-## 贡献
+## 🤝 贡献
 
-欢迎提交 Issue 和 Pull Request。
+欢迎提交 Issue 和 Pull Request！
 
-## 联系方式
+## ⚠️ 注意事项
 
-如有问题，请提交 Issue 或联系维护者。
+1. 本项目适用于学习和测试环境
+
+---
+
+**版本信息**：Ansible 1.34.2 | Kubernetes 二进制部署 | Ubuntu 24.04
